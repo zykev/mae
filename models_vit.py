@@ -20,18 +20,22 @@ import timm.models.vision_transformer
 class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
     """ Vision Transformer with support for global average pooling
     """
-    def __init__(self, global_pool=False, **kwargs):
+    def __init__(self, **kwargs):
+        if 'global_pool' in kwargs:
+            self.global_pool = kwargs['global_pool']
+            kwargs.pop('global_pool')
         super(VisionTransformer, self).__init__(**kwargs)
 
-        self.global_pool = global_pool
+        
         if self.global_pool:
             norm_layer = kwargs['norm_layer']
             embed_dim = kwargs['embed_dim']
             self.fc_norm = norm_layer(embed_dim)
 
-            del self.norm  # remove the original norm
+            if hasattr(self, 'norm'):
+                del self.norm  # remove the original norm
 
-    def forward_features(self, x):
+    def forward_features(self, x, **kwargs):
         B = x.shape[0]
         x = self.patch_embed(x)
 
@@ -51,6 +55,27 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
             outcome = x[:, 0]
 
         return outcome
+    
+    def forward_head(self, x, pre_logits: bool = False):
+        """
+        重写此函数以屏蔽父类的 pool 和重复的 fc_norm。
+        因为我们在 forward_features 里已经处理完了这些。
+        """
+        # 直接跳过 self.pool(x) 和 self.fc_norm(x)，因为 forward_features 已经做过了
+        x = self.head_drop(x)
+        return x if pre_logits else self.head(x)
+
+    def forward(self, x, **kwargs):
+        """
+        重写 forward，确保它调用的是我们修正后的逻辑。
+        """
+        # 1. 这里的 x 出来已经是 [Batch, 768]
+        x = self.forward_features(x)
+        
+        # 2. 调用我们重写后的 forward_head
+        x = self.forward_head(x)
+        
+        return x
 
 
 def vit_base_patch16(**kwargs):
