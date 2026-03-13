@@ -33,7 +33,7 @@ def prepare_model(chkpt_dir, arch='mae_vit_base_patch16'):
     print(msg)
     return model
 
-def run_one_image(img, model):
+def run_one_image(img, model, mask_ratio=0.75):
     x = torch.tensor(img)
 
     # make it a batch-like
@@ -41,7 +41,7 @@ def run_one_image(img, model):
     x = torch.einsum('nhwc->nchw', x)
 
     # run MAE
-    loss, y, mask = model(x.float(), mask_ratio=0.75)
+    loss, y, mask = model(x.float(), mask_ratio=mask_ratio)
     y = model.unpatchify(y)
     y = torch.einsum('nchw->nhwc', y).detach().cpu()
 
@@ -76,6 +76,12 @@ def run_one_image(img, model):
 
     plt.show()
 
+# %%
+# This is an MAE model trained with pixels as targets for visualization (ViT-Large, training mask ratio=0.75)
+
+chkpt_dir = 'exp/pretrain_v2/checkpoint-399.pth'
+model_mae = prepare_model(chkpt_dir, 'mae_vit_base_patch16')
+print('Model loaded.')
 
 # %%
 img_path = ".datasets/intraoral/intraoral/amy/1023_process/process/s211037083/D.png"
@@ -92,16 +98,46 @@ img = img / imagenet_std
 plt.rcParams['figure.figsize'] = [5, 5]
 show_image(torch.tensor(img))
 
-
-# %%
-# This is an MAE model trained with pixels as targets for visualization (ViT-Large, training mask ratio=0.75)
-
-chkpt_dir = 'exp/pretrain_v1/checkpoint-399.pth'
-model_mae = prepare_model(chkpt_dir, 'mae_vit_base_patch16')
-print('Model loaded.')
-
-# %%
-# make random mask reproducible (comment out to make it change)
 torch.manual_seed(2)
 print('MAE with pixel reconstruction:')
-run_one_image(img, model_mae)
+run_one_image(img, model_mae, mask_ratio=0.1)
+
+
+# %%
+img_path = ".datasets/intraoral/intraoral/amy/1023_process/sextant/s211037083/F/S2.png"
+img = Image.open(img_path).convert("RGB")
+img = img.resize((224, 224))
+img = np.array(img) / 255.
+
+assert img.shape == (224, 224, 3)
+
+# normalize by ImageNet mean and std
+img = img - imagenet_mean
+img = img / imagenet_std
+
+plt.rcParams['figure.figsize'] = [5, 5]
+show_image(torch.tensor(img))
+
+torch.manual_seed(2)
+print('MAE with pixel reconstruction:')
+run_one_image(img, model_mae, mask_ratio=0.1)
+
+
+# %%
+img_path = ".datasets/intraoral/intraoral/amy/1023_process/single_tooth/s211037083/F/13.png"
+img = Image.open(img_path).convert("RGB")
+img = img.resize((224, 224))
+img = np.array(img) / 255.
+
+assert img.shape == (224, 224, 3)
+
+# normalize by ImageNet mean and std
+img = img - imagenet_mean
+img = img / imagenet_std
+
+plt.rcParams['figure.figsize'] = [5, 5]
+show_image(torch.tensor(img))
+
+torch.manual_seed(2)
+print('MAE with pixel reconstruction:')
+run_one_image(img, model_mae, mask_ratio=0.1)

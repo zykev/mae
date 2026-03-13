@@ -12,9 +12,9 @@ python main_pretrain.py \
     --resume ".checkpoints/intraoral/mae_pretrain_vit_base_full.pth" \
     --epochs 400 \
     --warmup_epochs 40 \
-    --mask_ratio 0.1 \
+    --mask_ratio 0.5 \
     --blr 5e-4 \
     --weight_decay 0.05 \
     --data_path ".datasets/intraoral/intraoral" \
-    --output_dir "exp/pretrain_v2" \
-    --log_dir "exp/pretrain_v2"
+    --output_dir "exp/pretrain_v3" \
+    --log_dir "exp/pretrain_v3"
