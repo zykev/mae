@@ -1,20 +1,25 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 # 设置环境变量
 export OMP_NUM_THREADS=1
 
-# 指定用于训练的 GPU，可以写成 cuda:0 cuda:1 cuda:2 或 0 1 2
-GPUS=(cuda:0 cuda:1 cuda:2)
+# 指定用于训练的 GPU，可以写成 "cuda:0 cuda:1 cuda:2" 或 "0 1 2"
+GPUS="cuda:0 cuda:1 cuda:2"
 
-GPU_IDS=()
-for GPU in "${GPUS[@]}"; do
-    GPU_IDS+=("${GPU#cuda:}")
+CUDA_VISIBLE_DEVICES=""
+NUM_GPUS=0
+for GPU in $GPUS; do
+    GPU_ID=${GPU#cuda:}
+    if [ -z "$CUDA_VISIBLE_DEVICES" ]; then
+        CUDA_VISIBLE_DEVICES=$GPU_ID
+    else
+        CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES,$GPU_ID
+    fi
+    NUM_GPUS=$((NUM_GPUS + 1))
 done
 
-CUDA_VISIBLE_DEVICES=$(IFS=,; echo "${GPU_IDS[*]}")
 export CUDA_VISIBLE_DEVICES
-NUM_GPUS=${#GPU_IDS[@]}
 
 # 执行 Python 程序
 torchrun --nproc_per_node="${NUM_GPUS}" main_pretrain.py \
