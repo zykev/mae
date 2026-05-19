@@ -85,7 +85,7 @@ def get_args_parser():
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='',
-                        help='resume from checkpoint')
+                        help='load pretrained model weights from checkpoint')
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
@@ -99,6 +99,7 @@ def get_args_parser():
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--local_rank', default=-1, type=int)
+    parser.add_argument('--local-rank', default=-1, type=int, dest='local_rank')
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
@@ -112,7 +113,10 @@ def main(args):
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
 
-    device = torch.device(args.device)
+    if args.distributed:
+        device = torch.device('cuda', args.gpu)
+    else:
+        device = torch.device(args.device)
 
     # fix the seed for reproducibility
     seed = args.seed + misc.get_rank()
@@ -184,7 +188,8 @@ def main(args):
     print(optimizer)
     loss_scaler = NativeScaler()
 
-    misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
+    misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                    loss_scaler=loss_scaler, load_optimizer=False)
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
