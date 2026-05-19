@@ -15,6 +15,6 @@ python main_pretrain.py \
     --mask_ratio 0.5 \
     --blr 5e-4 \
     --weight_decay 0.05 \
-    --data_path ".datasets/intraoral/intraoral" \
+    --data_path ".datasets/intraoral" \
     --output_dir "exp/pretrain_v3" \
     --log_dir "exp/pretrain_v3"
