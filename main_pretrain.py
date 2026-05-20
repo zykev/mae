@@ -331,6 +331,16 @@ def main(args):
     print("accumulate grad iterations: %d" % args.accum_iter)
     print("effective batch size: %d" % eff_batch_size)
 
+    if args.output_dir and misc.is_main_process():
+        log_config = {
+            'type': 'config',
+            'job_dir': os.path.dirname(os.path.realpath(__file__)),
+            'args': vars(args),
+            'effective_batch_size': eff_batch_size,
+        }
+        with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
+            f.write(json.dumps(log_config) + "\n")
+
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
