@@ -9,10 +9,10 @@ from PIL import Image
 import models_mae
 
 # --- 配置区 ---
-DATA_PATH = ".datasets/intraoral/intraoral"
+DATA_PATH = ".datasets/intraoral"
 # 填入你最新的 checkpoint 路径
-CHKPT_DIR = 'exp/pretrain_v2/checkpoint-399.pth' 
-SAVE_DIR = "exp/pretrain_v2/visualizations_4col"
+CHKPT_DIR = 'exp/pretrain_v1/checkpoint-399.pth' 
+SAVE_DIR = "exp/pretrain_v1/visualization"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406])
@@ -155,6 +155,6 @@ if __name__ == "__main__":
         
         # 3. 批量生成
         for cat_name, paths in all_categories.items():
-            save_4col_grid(cat_name, paths, model_mae, n=20, mask_ratio=0.1)
+            save_4col_grid(cat_name, paths, model_mae, n=20, mask_ratio=0.75)
         
         print(f"\n可视化完成！请查看目录: {SAVE_DIR}")
