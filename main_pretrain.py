@@ -84,7 +84,7 @@ def get_args_parser():
     parser.add_argument('--log_dir', default='./output_dir',
                         help='path where to tensorboard log')
     parser.add_argument('--vis_freq', default=100, type=int,
-                        help='log reconstruction visualizations every N epochs, 0 to disable')
+                        help='log reconstruction visualizations every N epochs, 0 for final epoch only')
     parser.add_argument('--vis_num_images', default=8, type=int,
                         help='number of fixed images used for reconstruction visualization')
     parser.add_argument('--wandb', action='store_true',
@@ -265,7 +265,7 @@ def main(args):
     dataset_train = build_dataset(is_train=True, args=args)
     vis_paths_by_category = {}
     vis_transform = None
-    if misc.is_main_process() and args.vis_freq > 0 and args.vis_num_images > 0:
+    if misc.is_main_process() and args.vis_num_images > 0:
         vis_paths_by_category = select_categorized_visualization_paths(
             dataset_train, args.vis_num_images, args.seed
         )
@@ -366,8 +366,12 @@ def main(args):
             wandb_run=wandb_run,
             args=args
         )
-        if ((log_writer is not None or wandb_run is not None) and args.vis_freq > 0 and
-                (epoch % args.vis_freq == 0 or epoch + 1 == args.epochs)):
+        visualize_this_epoch = (
+            (log_writer is not None or wandb_run is not None) and
+            args.vis_num_images > 0 and
+            ((args.vis_freq > 0 and epoch % args.vis_freq == 0) or epoch + 1 == args.epochs)
+        )
+        if visualize_this_epoch:
             for category, vis_paths in vis_paths_by_category.items():
                 log_reconstruction_visualizations(
                     model_without_ddp, vis_paths, vis_transform,
