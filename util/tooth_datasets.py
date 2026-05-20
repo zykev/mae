@@ -104,11 +104,40 @@ def build_transform(is_train, args):
         #     mean=mean,
         #     std=std,
         # )
+        # transform = transforms.Compose([
+        #     transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
+        #     transforms.RandomHorizontalFlip(),
+        #     transforms.ToTensor(),
+        #     transforms.Normalize(mean=mean, std=std)])
+        
+
         transform = transforms.Compose([
-            transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
-            transforms.RandomHorizontalFlip(),
+            transforms.RandomResizedCrop(
+                args.input_size,
+                scale=(0.5, 1.0),
+                ratio=(0.9, 1.1),
+                interpolation=transforms.InterpolationMode.BICUBIC,
+            ),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomApply([
+                transforms.ColorJitter(
+                    brightness=0.2,
+                    contrast=0.2,
+                    saturation=0.15,
+                    hue=0.03,
+                )
+            ], p=0.5),
+            transforms.RandomRotation(
+                degrees=10,
+                interpolation=transforms.InterpolationMode.BICUBIC,
+                fill=0,
+            ),
+            transforms.RandomApply([
+                transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))
+            ], p=0.2),
             transforms.ToTensor(),
-            transforms.Normalize(mean=mean, std=std)])
+            transforms.Normalize(mean=mean, std=std),
+        ])
         
         return transform
 

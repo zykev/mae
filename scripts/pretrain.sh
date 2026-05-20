@@ -32,6 +32,9 @@ torchrun --nproc_per_node="${NUM_GPUS}" main_pretrain.py \
     --mask_ratio 0.75 \
     --blr 5e-5 \
     --weight_decay 0.05 \
+    --vis_freq 50 \
+    --vis_num_images 8 \
+    --norm_pix_loss \
     --data_path ".datasets/intraoral" \
-    --output_dir "exp/pretrain_v1" \
-    --log_dir "exp/pretrain_v1"
+    --output_dir "exp/pretrain_v2" \
+    --log_dir "exp/pretrain_v2"
