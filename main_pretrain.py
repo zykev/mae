@@ -381,7 +381,11 @@ def main(args):
                     ) if args.output_dir else None,
                     wandb_run=wandb_run,
                 )
-        if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
+        save_this_epoch = (
+            args.output_dir and
+            ((args.vis_freq > 0 and epoch % args.vis_freq == 0) or epoch + 1 == args.epochs)
+        )
+        if save_this_epoch:
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
