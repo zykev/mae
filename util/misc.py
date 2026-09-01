@@ -292,7 +292,7 @@ def get_grad_norm_(parameters, norm_type: float = 2.0) -> torch.Tensor:
     return total_norm
 
 
-def save_model(args, epoch, model, model_without_ddp, optimizer, loss_scaler):
+def save_model(args, epoch, model, model_without_ddp, optimizer, loss_scaler, split_metadata=None):
     output_dir = Path(args.output_dir)
     epoch_name = str(epoch)
     if loss_scaler is not None:
@@ -305,11 +305,53 @@ def save_model(args, epoch, model, model_without_ddp, optimizer, loss_scaler):
                 'scaler': loss_scaler.state_dict(),
                 'args': args,
             }
+            # 病例级 split / manifest 审计侧车（compare/ 用其做泄漏检查与覆盖统计）
+            if split_metadata is not None:
+                to_save['split_metadata'] = split_metadata
 
             save_on_master(to_save, checkpoint_path)
     else:
         client_state = {'epoch': epoch}
         model.save_checkpoint(save_dir=args.output_dir, tag="checkpoint-%s" % epoch_name, client_state=client_state)
+
+
+def load_init_checkpoint(args, model_without_ddp):
+    """Load model weights only (e.g. official pretrained MAE / an adapted checkpoint),
+    without touching optimizer, scaler or epoch. Handles pos_embed size mismatches
+    by re-initializing the positional embedding to the target grid."""
+    checkpoint = torch.load(args.init_checkpoint, map_location='cpu')
+    state_dict = checkpoint['model'] if 'model' in checkpoint else checkpoint
+
+    pos_embed_key = 'pos_embed'
+    if pos_embed_key in state_dict and pos_embed_key in model_without_ddp.state_dict():
+        src = state_dict[pos_embed_key]
+        dst = model_without_ddp.state_dict()[pos_embed_key]
+        if src.shape != dst.shape:
+            print(f"init_checkpoint: resizing pos_embed {tuple(src.shape)} -> {tuple(dst.shape)}")
+            src = _resize_pos_embed(src, dst.shape)
+            state_dict = dict(state_dict)
+            state_dict[pos_embed_key] = src
+
+    model_without_ddp.load_state_dict(state_dict, strict=False)
+    print("Loaded init checkpoint (weights only) %s" % args.init_checkpoint)
+
+
+def _resize_pos_embed(pos_embed, target_shape):
+    """Interpolate a 1D [1, L, D] positional embedding to a new sequence length
+    (patches only; the class token position is preserved)."""
+    import torch.nn.functional as F
+    src = pos_embed
+    src_cls = src[:, :1]
+    src_patch = src[:, 1:]
+    n_patch_src = src_patch.shape[1]
+    n_patch_dst = target_shape[1] - 1
+    dim = src.shape[-1]
+    side_src = int(round(n_patch_src ** 0.5))
+    side_dst = int(round(n_patch_dst ** 0.5))
+    grid = src_patch.reshape(1, side_src, side_src, dim).permute(0, 3, 1, 2)
+    grid = F.interpolate(grid, size=(side_dst, side_dst), mode="bicubic", align_corners=False)
+    grid = grid.permute(0, 2, 3, 1).reshape(1, side_dst * side_dst, dim)
+    return torch.cat([src_cls, grid], dim=1)
 
 
 def load_model(args, model_without_ddp, optimizer, loss_scaler, load_optimizer=True):

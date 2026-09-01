@@ -79,6 +79,16 @@ def get_args_parser():
     parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
 
+    parser.add_argument('--split_json', default=None, type=str,
+                        help='case-level train/test split JSON (datasets/split.py::create_or_load_split); '
+                             'when set, data is filtered by case_id instead of a path-order split')
+    parser.add_argument('--split', default='train', type=str, choices=('train', 'test'),
+                        help='partition of --split_json to use for this run')
+    parser.add_argument('--categories', default='full,tooth,sextant,group', type=str,
+                        help='comma-separated crop categories: full,tooth,sextant,group')
+    parser.add_argument('--category_sampling', default=None, type=str,
+                        help='per-category downsampling ratios, e.g. "full:1.0,tooth:0.5,sextant:0.5,group:0.5"')
+
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default='./output_dir',
@@ -99,7 +109,10 @@ def get_args_parser():
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='',
-                        help='load pretrained model weights from checkpoint')
+                        help='full recovery checkpoint (model + optimizer + scaler + epoch)')
+    parser.add_argument('--init_checkpoint', default=None, type=str,
+                        help='weights-only initialization (official pretrained or adapted checkpoint); '
+                             'handles pos_embed resizing and never touches optimizer/epoch')
 
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
                         help='start epoch')
@@ -141,6 +154,21 @@ def denormalize_batch(imgs):
     return (imgs * std + mean).clamp(0, 1)
 
 
+def _with_exposures(split_metadata, exposures):
+    """Attach a lightweight exposure summary to the checkpoint sidecar without
+    bloating it with per-sample counters (full map goes to coverage.json)."""
+    if split_metadata is None or not exposures:
+        return split_metadata
+    metadata = dict(split_metadata)
+    from collections import Counter
+    by_crop = Counter()
+    for sample_key, count in exposures.items():
+        crop_type = sample_key.split(":")[2] if sample_key.count(":") >= 2 else "?"
+        by_crop[crop_type] += count
+    metadata["exposure_summary"] = dict(by_crop)
+    return metadata
+
+
 def select_visualization_paths(image_paths, num_images, seed):
     if len(image_paths) == 0:
         return []
@@ -155,6 +183,20 @@ def select_visualization_paths(image_paths, num_images, seed):
 
 
 def select_categorized_visualization_paths(dataset, num_images, seed):
+    if len(dataset) == 0:
+        return {}
+
+    # 记录式数据集按 crop_type 分组；旧式路径数据集按目录名分组
+    if hasattr(dataset, 'records') and dataset.records:
+        categories = {crop: [] for crop in ('full', 'tooth', 'sextant', 'group')}
+        for record in dataset.records:
+            categories[record['crop_type']].append(record['source_image_path'])
+        return {
+            category: select_visualization_paths(paths, num_images, seed + i)
+            for i, (category, paths) in enumerate(categories.items())
+            if len(paths) > 0
+        }
+
     if not hasattr(dataset, 'image_paths') or len(dataset.image_paths) == 0:
         return {}
 
@@ -274,6 +316,38 @@ def main(args):
         for category, paths in vis_paths_by_category.items():
             print(f"  {category}: {len(paths)} images")
 
+    # 病例级 split：导出 manifest + 审计（主进程），并构建验证集 manifest
+    split_metadata = None
+    if getattr(args, 'split_json', None):
+        from util import dental_records
+        from util.tooth_datasets import DentalRecordDataset
+        split_metadata = {
+            'split_json': str(args.split_json),
+            'split': getattr(args, 'split', 'train'),
+            'categories': getattr(args, 'categories', 'full,tooth,sextant,group'),
+            'category_sampling': getattr(args, 'category_sampling', None),
+            'data_root': str(args.data_path),
+        }
+        if misc.is_main_process():
+            if isinstance(dataset_train, DentalRecordDataset):
+                dataset_train.write_manifest('train_manifest')
+                dental_records.print_audit(dataset_train.records, 'train')
+            # public split JSON 只含 train/test；训练运行用 test 作为验证划分
+            val_split = 'test' if getattr(args, 'split', 'train') == 'train' else 'train'
+            val_categories_raw = getattr(args, 'categories', 'full,tooth,sextant,group')
+            if isinstance(val_categories_raw, str):
+                val_categories = [c.strip() for c in val_categories_raw.split(',') if c.strip()]
+            else:
+                val_categories = list(val_categories_raw)
+            val_records = dental_records.build_records(
+                args.data_path, args.split_json, val_split, val_categories)
+            val_dataset = DentalRecordDataset(val_records, transform=None, is_train=False,
+                                              output_dir=args.output_dir, seed=args.seed)
+            val_dataset.write_manifest('val_manifest')
+            dental_records.print_audit(val_records, val_split)
+            split_metadata['val_manifest'] = val_dataset.manifest_path
+            split_metadata['train_manifest'] = dataset_train.manifest_path
+
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()
         global_rank = misc.get_rank()
@@ -351,8 +425,13 @@ def main(args):
     print(optimizer)
     loss_scaler = NativeScaler()
 
-    misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                    loss_scaler=loss_scaler, load_optimizer=False)
+    if getattr(args, 'init_checkpoint', None):
+        # 仅加载模型权重（官方/适配 checkpoint 初始化），不碰 optimizer/scaler/epoch
+        misc.load_init_checkpoint(args=args, model_without_ddp=model_without_ddp)
+    elif args.resume:
+        # 中断后完整恢复：model + optimizer + scaler + epoch
+        misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                        loss_scaler=loss_scaler, load_optimizer=True)
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
@@ -390,9 +469,14 @@ def main(args):
             ((args.vis_freq > 0 and epoch % args.vis_freq == 0) or epoch + 1 == args.epochs)
         )
         if save_this_epoch:
+            from util.tooth_datasets import DentalRecordDataset
+            exposures = None
+            if isinstance(dataset_train, DentalRecordDataset) and dataset_train.exposures:
+                exposures = dict(dataset_train.exposures)
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                loss_scaler=loss_scaler, epoch=epoch)
+                loss_scaler=loss_scaler, epoch=epoch,
+                split_metadata=_with_exposures(split_metadata, exposures))
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                         'epoch': epoch,}
