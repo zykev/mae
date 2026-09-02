@@ -4,7 +4,7 @@ set -e
 # MAE 牙科 SSL 预训练（病例级 split，§9.5.3）
 # 用法（在 baselines/mae 下执行；从任意目录运行也可，路径自动解析）:
 #   ./scripts/pretrain_dental.sh                    # 从头训练（官方权重初始化）
-#   ./scripts/pretrain_dental.sh --resume exp/mae_dental_v1_448/checkpoint-050.pth   # 中断恢复
+#   ./scripts/pretrain_dental.sh --resume exp/mae_dental_448/checkpoint-050.pth   # 中断恢复
 #   ./scripts/pretrain_dental.sh --init_checkpoint <adapted-ckpt>                # 权重初始化
 #
 # 分辨率说明：默认 INPUT_SIZE=448，与 ours（full_canvas 448）统一，dense 特征网格
