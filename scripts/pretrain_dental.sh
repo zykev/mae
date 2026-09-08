@@ -12,6 +12,8 @@ set -e
 #   util/pos_embed.py::interpolate_pos_embed 会自动把 pos_embed 从 16x16 双三次插值
 #   到 32x32（448/16），无需手工处理。
 #   需要 224 时：INPUT_SIZE=224 ./scripts/pretrain_dental.sh
+# 分布式 rendezvous 端口：本机常有其它任务（torchrun/accelerate 默认 29500）长期占用，
+# 故默认避开 29500；冲突时可用 MASTER_PORT=<port> ./scripts/pretrain_dental.sh 覆盖。
 export OMP_NUM_THREADS=1
 
 # 目录定位（脚本位于 <root>/baselines/mae/scripts/）
@@ -55,7 +57,10 @@ echo "[pretrain_dental] DATA_ROOT=${DATA_ROOT}"
 echo "[pretrain_dental] SPLIT_JSON=${SPLIT_JSON}"
 echo "[pretrain_dental] OUTPUT_DIR=${OUTPUT_DIR}"
 
-torchrun --nproc_per_node="${NUM_GPUS}" main_pretrain.py \
+MASTER_PORT="${MASTER_PORT:-29501}"
+echo "[pretrain_dental] MASTER_PORT=${MASTER_PORT}"
+
+torchrun --nproc_per_node="${NUM_GPUS}" --master_port="${MASTER_PORT}" main_pretrain.py \
     --accum_iter 2 \
     --input_size "${INPUT_SIZE}" \
     --batch_size 16 \
