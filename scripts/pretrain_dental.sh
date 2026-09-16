@@ -22,7 +22,7 @@ MAE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WORKSPACE_ROOT="$(cd "${MAE_ROOT}/../.." && pwd)"
 
 # 指定用于训练的 GPU，可以写成 "cuda:0 cuda:1 cuda:2" 或 "0 1 2"
-GPUS="${GPUS:-cuda:2 cuda:3 cuda:4 cuda:5 cuda:6 cuda:7}"
+GPUS="${GPUS:-cuda:0 cuda:1 cuda:2 cuda:3 cuda:4 cuda:5}"
 
 # 训练输入分辨率（与 ours full_canvas=448 统一）；ViT 全局注意力 O(n^2)，
 # 448 下 patch token 为 28x28=784（224 时 196），batch_size 已相应调小（224 时为 64）
@@ -42,8 +42,21 @@ done
 
 export CUDA_VISIBLE_DEVICES
 
-DATA_ROOT="${DATA_ROOT:-${WORKSPACE_ROOT}/.datasets/intraoral}"
-SPLIT_JSON="${SPLIT_JSON:-${WORKSPACE_ROOT}/.datasets/intraoral/train_test_seed0_test0p2.json}"
+# 数据根目录兼容：优先 .datasets/intraoral，找不到（挂载点缺失 / 符号链接失效）时
+# 回退到 .datasets/intraoral1。显式设置 DATA_ROOT / SPLIT_JSON 时以环境变量为准，不回退。
+resolve_dental_path() {
+    # $1 = 相对 .datasets 层名的后缀（"" 或 "/train_test_seed0_test0p2.json"）
+    for ROOT_NAME in intraoral intraoral1; do
+        if [ -e "${WORKSPACE_ROOT}/.datasets/${ROOT_NAME}$1" ]; then
+            printf '%s\n' "${WORKSPACE_ROOT}/.datasets/${ROOT_NAME}$1"
+            return 0
+        fi
+    done
+    printf '%s\n' "${WORKSPACE_ROOT}/.datasets/intraoral$1"
+}
+
+DATA_ROOT="${DATA_ROOT:-$(resolve_dental_path "")}"
+SPLIT_JSON="${SPLIT_JSON:-$(resolve_dental_path "/train_test_seed0_test0p2.json")}"
 # 448 分辨率用独立输出目录，避免覆盖已有 224 训练产物（compare manifest 引用旧路径）
 OUTPUT_DIR="${OUTPUT_DIR:-${MAE_ROOT}/exp/mae_dental_448}"
 INIT_CKPT="${INIT_CKPT:-${WORKSPACE_ROOT}/.checkpoints/intraoral/mae_pretrain_vit_base_full.pth}"
