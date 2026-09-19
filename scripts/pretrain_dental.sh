@@ -14,6 +14,11 @@ set -e
 #   需要 224 时：INPUT_SIZE=224 ./scripts/pretrain_dental.sh
 # 分布式 rendezvous 端口：本机常有其它任务（torchrun/accelerate 默认 29500）长期占用，
 # 故默认避开 29500；冲突时可用 MASTER_PORT=<port> ./scripts/pretrain_dental.sh 覆盖。
+#
+# 多卡：默认 6 卡（GPU 0-5），统一走 torchrun DDP；GPUS 环境变量可换成任意卡组/卡数，
+#   分隔符空格 / 逗号 / 分号都接受，元素可带 cuda: 前缀，例如
+#   GPUS="2 3" ./scripts/pretrain_dental.sh              # 2 卡
+#   GPUS="cuda:2,cuda:3" ./scripts/pretrain_dental.sh    # 与上面等价
 export OMP_NUM_THREADS=1
 
 # 目录定位（脚本位于 <root>/baselines/mae/scripts/）
@@ -21,24 +26,42 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MAE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WORKSPACE_ROOT="$(cd "${MAE_ROOT}/../.." && pwd)"
 
-# 指定用于训练的 GPU，可以写成 "cuda:0 cuda:1 cuda:2" 或 "0 1 2"
+# 指定用于训练的 GPU：分隔符空格 / 逗号 / 分号都接受，元素可带 cuda: 前缀
+#   GPUS="0 1 2"   GPUS="0,1,2"   GPUS="cuda:0 cuda:1"   GPUS="0, 1"
 GPUS="${GPUS:-cuda:0 cuda:1 cuda:2 cuda:3 cuda:4 cuda:5}"
 
 # 训练输入分辨率（与 ours full_canvas=448 统一）；ViT 全局注意力 O(n^2)，
 # 448 下 patch token 为 28x28=784（224 时 196），batch_size 已相应调小（224 时为 64）
 INPUT_SIZE="${INPUT_SIZE:-448}"
 
+# 解析 GPUS -> torchrun 用的 CUDA_VISIBLE_DEVICES 列表与卡数 NUM_GPUS：
+# 分隔符空格 / 逗号 / 分号都接受，元素可带 cuda: 前缀，以下四种等价：
+#   GPUS="2 3"   GPUS="2,3"   GPUS="cuda:2 cuda:3"   GPUS="2, 3"
+# set -f：解析期间关闭通配符展开（GPUS 里误写 * ? [ 时不会被 glob 成文件名）。
 CUDA_VISIBLE_DEVICES=""
 NUM_GPUS=0
-for GPU in $GPUS; do
+set -f
+for GPU in $(printf '%s\n' "${GPUS}" | tr ',;' '  '); do
     GPU_ID=${GPU#cuda:}
-    if [ -z "$CUDA_VISIBLE_DEVICES" ]; then
-        CUDA_VISIBLE_DEVICES=$GPU_ID
+    case "${GPU_ID}" in
+        ''|*[!0-9]*)
+            echo "[pretrain_dental] ERROR: GPUS 中的 '${GPU}' 不是合法 GPU 序号" >&2
+            echo "  合法写法: GPUS=\"2 3\" / GPUS=\"2,3\" / GPUS=\"cuda:2 cuda:3\"" >&2
+            exit 1
+            ;;
+    esac
+    if [ -z "${CUDA_VISIBLE_DEVICES}" ]; then
+        CUDA_VISIBLE_DEVICES=${GPU_ID}
     else
-        CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES,$GPU_ID
+        CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES},${GPU_ID}
     fi
     NUM_GPUS=$((NUM_GPUS + 1))
 done
+set +f
+if [ "${NUM_GPUS}" -eq 0 ]; then
+    echo "[pretrain_dental] ERROR: GPUS 为空，应形如 GPUS=\"2 3\" 或 GPUS=\"2,3\"" >&2
+    exit 1
+fi
 
 export CUDA_VISIBLE_DEVICES
 
