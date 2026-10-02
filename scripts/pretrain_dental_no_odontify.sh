@@ -8,7 +8,7 @@ set -e
 #
 # 用法（在 baselines/mae 下执行；从任意目录运行也可，路径自动解析）:
 #   ./scripts/pretrain_dental_no_odontify.sh
-#   ./scripts/pretrain_dental_no_odontify.sh --resume exp/mae_dental_448_no_odontify/checkpoint-050.pth
+#   ./scripts/pretrain_dental_no_odontify.sh --resume exp/mae_dental_448_no_odontify/checkpoint-40.pth
 #   ./scripts/pretrain_dental_no_odontify.sh --init_checkpoint <adapted-ckpt>
 #
 # 可覆盖环境变量:
@@ -42,7 +42,7 @@ WORKSPACE_ROOT="$(cd "${MAE_ROOT}/../.." && pwd)"
 # 指定用于训练的 GPU：分隔符空格 / 逗号 / 分号都接受，元素可带 cuda: 前缀
 #   GPUS="0 1 2"   GPUS="0,1,2"   GPUS="cuda:0 cuda:1"   GPUS="0, 1"
 # 默认与 scripts/pretrain_dental.sh 保持一致（0-5）
-GPUS="${GPUS:-cuda:0 cuda:1 cuda:2 cuda:3 cuda:4 cuda:5n}"
+GPUS="${GPUS:-cuda:0 cuda:1 cuda:2 cuda:3 cuda:4 cuda:5}"
 
 # 解析 GPUS -> torchrun 用的 CUDA_VISIBLE_DEVICES 列表与卡数 NUM_GPUS
 # set -f：解析期间关闭通配符展开（GPUS 里误写 * ? [ 时不会被 glob 成文件名）。
@@ -117,18 +117,23 @@ echo "[pretrain_dental_no_odontify] SPLIT_JSON=${SPLIT_JSON}"
 echo "[pretrain_dental_no_odontify] OUTPUT_DIR=${OUTPUT_DIR}"
 echo "[pretrain_dental_no_odontify] MASTER_PORT=${MASTER_PORT}"
 
+# ckpt 保存频率：MAE 上游没有 --save_freq，保存触发条件复用 --vis_freq
+# （main_pretrain.py: (vis_freq > 0 and epoch % vis_freq == 0) or epoch + 1 == epochs，
+#   epoch 为 0-based）→ --vis_freq 10 = 每 10 个 epoch 存一次，与 Swin-MAE / simclr 的
+# --save_freq 10 对齐。50 epoch 下产出 checkpoint-0/10/20/30/40.pth + 末轮 checkpoint-49.pth
+# （mae 文件名不补零）。重建可视化也随之间隔 10 epoch（每类 8 张，开销可忽略）。
 torchrun --nproc_per_node="${NUM_GPUS}" --master_port="${MASTER_PORT}" main_pretrain.py \
     --accum_iter 2 \
     --input_size "${INPUT_SIZE}" \
     --batch_size 16 \
     --model mae_vit_base_patch16 \
-    --epochs 100 \
+    --epochs 50 \
     --warmup_epochs 5 \
     --mask_ratio 0.75 \
     --blr 1e-4 \
     --min_lr 1e-6 \
     --weight_decay 0.05 \
-    --vis_freq 50 \
+    --vis_freq 10 \
     --vis_num_images 8 \
     --norm_pix_loss \
     --data_path "${DATA_ROOT}" \
