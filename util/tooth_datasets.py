@@ -213,8 +213,10 @@ def build_dataset(is_train, args):
         return dataset
 
     # 旧逻辑兜底：从磁盘结构爬取所有图片（无 case 级 split 时使用）
-    print(f"正在从 {args.data_path} 检索口腔影像数据...")
-    all_imgs = get_intraoral_images(args.data_path)
+    # 优先 .datasets/intraoral，挂载点缺失/符号链接失效时回退 .datasets/intraoral1。
+    data_path = str(dental_records.resolve_compatible_path(args.data_path))
+    print(f"正在从 {data_path} 检索口腔影像数据...")
+    all_imgs = get_intraoral_images(data_path)
     dataset = DentalDataset(all_imgs, transform=transform)
 
     print(f"{'训练' if is_train else '验证'}集构建完成，包含图片数量: {len(dataset)}")

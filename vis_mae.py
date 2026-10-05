@@ -10,6 +10,12 @@ from PIL import Image
 
 import models_mae
 
+# 允许从任意 cwd 运行：把仓库根加入 sys.path 以复用统一的路径回退解析。
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from utils.path_compat import resolve_compatible_path
+
 # %%
 # define the utils
 
@@ -84,7 +90,10 @@ model_mae = prepare_model(chkpt_dir, 'mae_vit_base_patch16')
 print('Model loaded.')
 
 # %%
-img_path = ".datasets/intraoral/intraoral/amy/1023_process/process/s211037083/D.png"
+# 优先 .datasets/intraoral，挂载点缺失/符号链接失效时回退 .datasets/intraoral1。
+img_path = str(resolve_compatible_path(os.path.join(
+    _REPO_ROOT, ".datasets", "intraoral", "intraoral", "amy", "1023_process",
+    "process", "s211037083", "D.png")))
 img = Image.open(img_path).convert("RGB")
 img = img.resize((224, 224))
 img = np.array(img) / 255.
@@ -104,7 +113,9 @@ run_one_image(img, model_mae, mask_ratio=0.1)
 
 
 # %%
-img_path = ".datasets/intraoral/intraoral/amy/1023_process/sextant/s211037083/F/S2.png"
+img_path = str(resolve_compatible_path(os.path.join(
+    _REPO_ROOT, ".datasets", "intraoral", "intraoral", "amy", "1023_process",
+    "sextant", "s211037083", "F", "S2.png")))
 img = Image.open(img_path).convert("RGB")
 img = img.resize((224, 224))
 img = np.array(img) / 255.
@@ -124,7 +135,9 @@ run_one_image(img, model_mae, mask_ratio=0.1)
 
 
 # %%
-img_path = ".datasets/intraoral/intraoral/amy/1023_process/single_tooth/s211037083/F/13.png"
+img_path = str(resolve_compatible_path(os.path.join(
+    _REPO_ROOT, ".datasets", "intraoral", "intraoral", "amy", "1023_process",
+    "single_tooth", "s211037083", "F", "13.png")))
 img = Image.open(img_path).convert("RGB")
 img = img.resize((224, 224))
 img = np.array(img) / 255.

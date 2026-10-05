@@ -2,14 +2,22 @@ import os
 import glob
 import random
 random.seed(42) # 保证每次可视化的图片是一样的，方便对比不同权重
+import sys
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 import models_mae
 
+# 允许从任意 cwd 运行：把仓库根加入 sys.path 以复用统一的路径回退解析。
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+from utils.path_compat import resolve_compatible_path
+
 # --- 配置区 ---
-DATA_PATH = ".datasets/intraoral"
+# 优先 .datasets/intraoral，挂载点缺失/符号链接失效时回退 .datasets/intraoral1。
+DATA_PATH = str(resolve_compatible_path(os.path.join(_REPO_ROOT, ".datasets", "intraoral")))
 # 填入你最新的 checkpoint 路径
 CHKPT_DIR = 'exp/pretrain_v1/checkpoint-399.pth' 
 SAVE_DIR = "exp/pretrain_v1/visualization"
