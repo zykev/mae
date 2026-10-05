@@ -22,7 +22,7 @@ def train_one_epoch(model: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler,
                     log_writer=None,
-                    wandb_run=None,
+                    swanlab_run=None,
                     args=None):
     model.train(True)
     metric_logger = misc.MetricLogger(delimiter="  ")
@@ -68,7 +68,7 @@ def train_one_epoch(model: torch.nn.Module,
         metric_logger.update(lr=lr)
 
         loss_value_reduce = misc.all_reduce_mean(loss_value)
-        if (log_writer is not None or wandb_run is not None) and (data_iter_step + 1) % accum_iter == 0:
+        if (log_writer is not None or swanlab_run is not None) and (data_iter_step + 1) % accum_iter == 0:
             """ We use epoch_1000x as the x-axis in tensorboard.
             This calibrates different curves when batch size changes.
             """
@@ -76,8 +76,8 @@ def train_one_epoch(model: torch.nn.Module,
             if log_writer is not None:
                 log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
                 log_writer.add_scalar('lr', lr, epoch_1000x)
-            if wandb_run is not None:
-                wandb_run.log({
+            if swanlab_run is not None:
+                swanlab_run.log({
                     'train_loss': loss_value_reduce,
                     'lr': lr,
                     'epoch': epoch,
