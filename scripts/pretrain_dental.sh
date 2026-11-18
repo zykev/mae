@@ -68,7 +68,7 @@ export CUDA_VISIBLE_DEVICES
 # 数据根目录兼容：优先 .datasets/intraoral，找不到（挂载点缺失 / 符号链接失效）时
 # 回退到 .datasets/intraoral1。显式设置 DATA_ROOT / SPLIT_JSON 时以环境变量为准，不回退。
 resolve_dental_path() {
-    # $1 = 相对 .datasets 层名的后缀（"" 或 "/train_test_seed0_test0p2.json"）
+    # $1 = 相对 .datasets 层名的后缀（"" 或 "/train_test_seed0_test0p2_no_odontify.json"）
     for ROOT_NAME in intraoral intraoral1; do
         if [ -e "${WORKSPACE_ROOT}/.datasets/${ROOT_NAME}$1" ]; then
             printf '%s\n' "${WORKSPACE_ROOT}/.datasets/${ROOT_NAME}$1"
@@ -79,9 +79,9 @@ resolve_dental_path() {
 }
 
 DATA_ROOT="${DATA_ROOT:-$(resolve_dental_path "")}"
-SPLIT_JSON="${SPLIT_JSON:-$(resolve_dental_path "/train_test_seed0_test0p2.json")}"
+SPLIT_JSON="${SPLIT_JSON:-$(resolve_dental_path "/train_test_seed0_test0p2_no_odontify.json")}"
 # 448 分辨率用独立输出目录，避免覆盖已有 224 训练产物（compare manifest 引用旧路径）
-OUTPUT_DIR="${OUTPUT_DIR:-${MAE_ROOT}/exp/mae_dental_448}"
+OUTPUT_DIR="${OUTPUT_DIR:-${MAE_ROOT}/exp/mae_dental_448_no_odontify}"
 INIT_CKPT="${INIT_CKPT:-${WORKSPACE_ROOT}/.checkpoints/intraoral/mae_pretrain_vit_base_full.pth}"
 
 # 额外透传参数（如 --resume ...、--category_sampling ...）
